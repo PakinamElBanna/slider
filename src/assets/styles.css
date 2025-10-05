@@ -1,0 +1,22 @@
+figure {
+    width: 90%;
+    max-width: 75rem;
+    margin: 0 auto;
+}
+
+#slider {
+    width: 100%;
+    background-color: grey;
+}
+
+#slider:active {
+    cursor: grabbing;
+}
+
+#slider-help {
+    text-align: center;
+    font-style: italic;
+    color: grey;
+    font-size: 12px;
+}
+
