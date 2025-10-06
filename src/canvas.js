@@ -7,6 +7,8 @@ export function initializeCanvas() {
   let canvasWidth, canvasHeight;
 
   let slides = [];
+  let loadedIndices = new Set();
+
   let offsetX = 0;
   let startX = 0;
   let isDragging = false;
@@ -40,35 +42,33 @@ export function initializeCanvas() {
   function drawImages() {
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-    slides.forEach((img, index) => drawContain(img, index));
-  }
-
-  async function loadSlides() {
-    slides = await Promise.all(
-      slideUrls.map((src) => {
-        return new Promise((resolve) => {
-          const img = new Image();
-          img.src = src;
-          img.onload = () => resolve(img);
-        });
-      })
-    );
-
-    drawImages();
-  }
-
-  async function loadFirstImage() {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.src = slideUrls[0];
-      img.onload = () => resolve(img);
+    slides.forEach((img, index) => {
+      if (img) drawContain(img, index);
     });
   }
 
+  async function loadImage(index) {
+    if (loadedIndices.has(index)) return slides[index]; // not checking if index < 0 and index >= slideUrls.length since we dont have next and previous button. Keeping it simple for now
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = slideUrls[index];
+      img.onload = () => {
+        slides[index] = img;
+        loadedIndices.add(index);
+        resolve(img);
+      };
+    });
+  }
+
+  async function lazyLoadImages(currentIndex) {
+    await Promise.all([loadImage(currentIndex), loadImage(currentIndex + 1)]);
+    drawImages();
+  }
   async function resizeCanvas() {
     const dpr = window.devicePixelRatio || 1;
 
-    const firstImage = await loadFirstImage();
+    const firstImage = slides[0] || (await loadImage(0));
+    if (!firstImage) return;
     const imageAspectRatio = firstImage.width / firstImage.height;
 
     const canvasRect = canvas.getBoundingClientRect();
@@ -87,7 +87,7 @@ export function initializeCanvas() {
 
   window.addEventListener("resize", resizeCanvas);
 
-  loadSlides();
+  lazyLoadImages(0);
 
   canvas.addEventListener("pointerdown", (e) => {
     isDragging = true;
@@ -100,7 +100,7 @@ export function initializeCanvas() {
 
     const movementX = e.clientX - startX;
     const newOffsetX = offsetX + movementX;
-    const leftDraggingOffset = -(slides.length - 1);
+    const leftDraggingOffset = -(slideUrls.length - 1);
 
     const minOffsetX = leftDraggingOffset * canvasWidth; // using canvasWidth is only valid because of the drawContain function
     const maxOffsetX = 0;
@@ -109,6 +109,10 @@ export function initializeCanvas() {
 
     offsetX = newOffsetX;
     startX = e.clientX;
+
+    const currentIndex = Math.floor(-offsetX / canvasWidth); // again, this assumption is only possible because of the scaling to canvas width
+
+    lazyLoadImages(currentIndex);
 
     drawImages();
   });
