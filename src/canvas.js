@@ -8,6 +8,8 @@ export function initializeCanvas() {
 
   let slides = [];
   let offsetX = 0;
+  let startX = 0;
+  let isDragging = false;
 
   function drawContain(image, slideIndex) {
     const imageAspectRatio = image.width / image.height;
@@ -86,4 +88,29 @@ export function initializeCanvas() {
   window.addEventListener("resize", resizeCanvas);
 
   loadSlides();
+
+  canvas.addEventListener("pointerdown", (e) => {
+    isDragging = true;
+    startX = e.clientX;
+    canvas.setPointerCapture(e.pointerId);
+  });
+
+  canvas.addEventListener("pointermove", (e) => {
+    if (isDragging) {
+      const movementX = e.clientX - startX;
+      offsetX += movementX;
+      startX = e.clientX;
+      drawImages();
+    }
+  });
+
+  canvas.addEventListener("pointerup", (e) => {
+    isDragging = false;
+    canvas.releasePointerCapture(e.pointerId);
+  });
+
+  canvas.addEventListener("pointercancel", (e) => {
+    isDragging = false;
+    canvas.releasePointerCapture(e.pointerId);
+  });
 }

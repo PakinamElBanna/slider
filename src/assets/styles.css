@@ -6,7 +6,7 @@ figure {
 
 #slider {
     width: 100%;
-    background-color: grey;
+    background-color: rgb(212, 209, 209);
 }
 
 #slider:active {
