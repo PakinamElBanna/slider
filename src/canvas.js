@@ -1,196 +1,141 @@
 import { slideUrls, fallbackUrls } from "./slides";
+import {
+  drawImageContained,
+  drawErrorPlaceholder,
+  loadImage,
+} from "./utils/imageUtils";
+import {
+  setupCanvasForDPR,
+  calculateBoundaries,
+  getCurrentSlideIndex,
+  getVisibleSlideRange,
+} from "./utils/canvasUtils";
+import { createScheduler } from "./utils/scheduleUtils";
+import { unloadDistantImages, getIndicesToLoad } from "./utils/memoryUtils";
 
 export function initializeCanvas() {
   const canvas = document.getElementById("slider");
-  const ctx = canvas.getContext("2d");
+  if (!canvas) {
+    console.error("Canvas element with id 'slider' not found");
+    return;
+  }
+
+  const ctx = canvas.getContext("2d", { alpha: false });
+
   const redrawThreshold = 5;
 
   let canvasWidth, canvasHeight, minOffsetX, maxOffsetX;
-
   let slides = [];
   let loadedIndices = new Set();
-
   let offsetX = 0;
   let startX = 0;
   let isDragging = false;
 
+  const scheduleRedraw = createScheduler();
+
   function updateBoundaries() {
-    const maxSlideLeftOffset = -(slideUrls.length - 1);
-    minOffsetX = maxSlideLeftOffset * canvasWidth; // using canvasWidth is only valid because of the drawContain function
-    maxOffsetX = 0;
+    ({ minOffsetX, maxOffsetX } = calculateBoundaries(
+      slideUrls.length,
+      canvasWidth
+    ));
   }
 
-  function unloadImages(currentIndex) {
-    const cacheRange = 3;
-    loadedIndices.forEach((index) => {
-      if (
-        index < currentIndex - cacheRange ||
-        index > currentIndex + cacheRange
-      ) {
-        delete slides[index];
-        loadedIndices.delete(index);
-      }
-    });
-  }
+  function drawVisibleArea() {
+    ctx.fillStyle = "lightgray";
 
-  function drawContain(image, slideIndex) {
-    let scaledWidth, scaledHeight;
-    const canvasAspectRatio = canvasWidth / canvasHeight;
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-    if (image === null) {
-      scaledWidth = canvasWidth;
-      scaledHeight = canvasHeight;
-    } else {
-      const imageAspectRatio = image.width / image.height;
+    const { startSlideIndex, endSlideIndex } = getVisibleSlideRange(
+      offsetX,
+      canvasWidth,
+      slideUrls.length
+    );
 
-      if (imageAspectRatio > canvasAspectRatio) {
-        scaledWidth = canvasWidth;
-        scaledHeight = canvasWidth / imageAspectRatio;
-      } else {
-        scaledWidth = canvasHeight * imageAspectRatio;
-        scaledHeight = canvasHeight;
+    for (let i = startSlideIndex; i <= endSlideIndex; i++) {
+      if (i < 0 || i >= slideUrls.length) continue;
+
+      const slideX = i * canvasWidth + offsetX;
+      const img = slides[i];
+
+      if (img) {
+        drawImageContained(ctx, img, slideX, 0, canvasWidth, canvasHeight);
+      } else if (loadedIndices.has(i)) {
+        drawErrorPlaceholder(ctx, slideX, 0, canvasWidth, canvasHeight);
       }
     }
-
-    const slideStartX = slideIndex * canvasWidth + offsetX;
-    const centeredImageX = slideStartX + (canvasWidth - scaledWidth) / 2;
-    const centeredImageY = (canvasHeight - scaledHeight) / 2;
-
-    if (image) {
-      ctx.drawImage(
-        image,
-        centeredImageX,
-        centeredImageY,
-        scaledWidth,
-        scaledHeight
-      );
-    } else {
-      ctx.fillStyle = "rgb(212, 209, 209)";
-      ctx.fillRect(centeredImageX, centeredImageY, scaledWidth, scaledHeight);
-      ctx.fillStyle = "rgb(148, 146, 146)";
-      ctx.font = "12px";
-      ctx.textAlign = "center";
-      ctx.fillText(
-        "Image unavailable",
-        centeredImageX + scaledWidth / 2,
-        centeredImageY + scaledHeight / 2
-      );
-    }
-  }
-
-  function drawImages() {
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-
-    slides.forEach((img, index) => {
-      if (loadedIndices.has(index)) {
-        drawContain(img, index);
-      }
-    });
-  }
-
-  async function loadImage(index, retries = 3) {
-    if (loadedIndices.has(index)) return slides[index]; // not checking if index < 0 and index >= slideUrls.length since we dont have next and previous button. Keeping it simple for now
-    return new Promise((resolve) => {
-      const attemptLoad = (retryCount, useFallback) => {
-        const img = new Image();
-        img.src = useFallback ? fallbackUrls[index] : slideUrls[index];
-        img.onload = () => {
-          slides[index] = img;
-          loadedIndices.add(index);
-          resolve(img);
-        };
-        img.onerror = () => {
-          if (retryCount > 0) {
-            console.warn(
-              `Retrying to load image at index ${index}: ${slideUrls[index]} (${retries - retryCount + 1} attempt)`
-            );
-            attemptLoad(retryCount - 1, useFallback);
-          } else if (!useFallback) {
-            console.warn(`Switching to fallback for index ${index}`);
-            attemptLoad(retries, true);
-          } else {
-            console.error(
-              `Failed to load image at index ${index}: ${
-                fallbackUrls[index]
-              } (fallback)`
-            );
-            slides[index] = null;
-            loadedIndices.add(index);
-            resolve(null);
-          }
-        };
-      };
-      attemptLoad(retries);
-    });
   }
 
   async function lazyLoadImages(currentIndex) {
-    const indicesToLoad = [
+    const indicesToLoad = getIndicesToLoad(
       currentIndex,
-      currentIndex + 1,
-      currentIndex + 2,
-    ].filter(
-      (index) =>
-        !loadedIndices.has(index) && index >= 0 && index < slideUrls.length
+      slideUrls.length,
+      loadedIndices
     );
 
-    if (indicesToLoad.length > 0) {
-      await Promise.all(indicesToLoad.map((index) => loadImage(index)));
-      drawImages();
-    }
+    const loadedImages = await Promise.all(
+      indicesToLoad.map((index) => loadImage(index, slideUrls, fallbackUrls))
+    );
+
+    // Update slides array
+    indicesToLoad.forEach((index, i) => {
+      const img = loadedImages[i];
+      slides[index] = img;
+      loadedIndices.add(index);
+    });
+
+    scheduleRedraw(() => drawVisibleArea());
+    unloadDistantImages(slides, loadedIndices, currentIndex);
   }
 
   async function resizeCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-
-    const firstImage = slides[0] || (await loadImage(0));
+    const firstImage =
+      slides[0] || (await loadImage(0, slideUrls, fallbackUrls));
     if (!firstImage) return;
-    const imageAspectRatio = firstImage.width / firstImage.height;
 
+    const imageAspectRatio = firstImage.width / firstImage.height;
     const canvasRect = canvas.getBoundingClientRect();
+
     canvasWidth = canvasRect.width;
     canvasHeight = canvasWidth / imageAspectRatio;
 
-    canvas.width = canvasWidth * dpr;
-    canvas.height = canvasHeight * dpr;
+    setupCanvasForDPR(canvas, ctx, canvasWidth, canvasHeight);
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Use actual CSS size
+    canvasWidth = canvas.clientWidth;
+    canvasHeight = canvas.clientHeight;
 
     updateBoundaries();
-    drawImages();
+    scheduleRedraw(() => drawVisibleArea());
   }
 
+  // Initialize
   resizeCanvas();
-
   window.addEventListener("resize", resizeCanvas);
-
   lazyLoadImages(0);
 
+  // Event listeners
   canvas.addEventListener("pointerdown", (e) => {
     isDragging = true;
     startX = e.clientX;
     canvas.setPointerCapture(e.pointerId);
+    canvas.focus();
   });
 
   canvas.addEventListener("pointermove", (e) => {
     if (!isDragging) return;
 
     const movementX = e.clientX - startX;
-
     if (Math.abs(movementX) < redrawThreshold) return;
 
     const newOffsetX = offsetX + movementX;
-
     if (newOffsetX > maxOffsetX || newOffsetX < minOffsetX) return;
 
     offsetX = newOffsetX;
     startX = e.clientX;
 
-    const currentIndex = Math.floor(-offsetX / canvasWidth); // again, this assumption is only possible because of the scaling to canvas width
-
-    lazyLoadImages(currentIndex).then(() => unloadImages(currentIndex));
-
-    drawImages();
+    const currentIndex = getCurrentSlideIndex(offsetX, canvasWidth);
+    lazyLoadImages(currentIndex);
+    scheduleRedraw(() => drawVisibleArea());
   });
 
   canvas.addEventListener("pointerup", (e) => {
@@ -203,20 +148,21 @@ export function initializeCanvas() {
     canvas.releasePointerCapture(e.pointerId);
   });
 
-  document.addEventListener("keydown", (e) => {
+  window.addEventListener("keydown", (e) => {
+    if (document.activeElement !== canvas) return;
+
     if (e.key === "ArrowRight") {
-      const nextIndex = Math.min(
-        Math.floor(-offsetX / canvasWidth) + 1,
-        slideUrls.length - 1
-      );
+      const currentIndex = getCurrentSlideIndex(offsetX, canvasWidth);
+      const nextIndex = Math.min(currentIndex + 1, slideUrls.length - 1);
       offsetX = -nextIndex * canvasWidth;
       lazyLoadImages(nextIndex);
-      drawImages();
+      scheduleRedraw(() => drawVisibleArea());
     } else if (e.key === "ArrowLeft") {
-      const prevIndex = Math.max(Math.floor(-offsetX / canvasWidth) - 1, 0);
+      const currentIndex = getCurrentSlideIndex(offsetX, canvasWidth);
+      const prevIndex = Math.max(currentIndex - 1, 0);
       offsetX = -prevIndex * canvasWidth;
       lazyLoadImages(prevIndex);
-      drawImages();
+      scheduleRedraw(() => drawVisibleArea());
     }
   });
 }

@@ -1,16 +1,23 @@
-figure {
+.container {
+    display: flex;
     width: 60%;
-    max-width: 75rem;
     margin: 0 auto;
+    flex-direction: column;
+    align-items: center;
 }
 
 #slider {
     width: 100%;
-    background-color: rgb(212, 209, 209);
+    outline-color: transparent;
 }
 
 #slider:active {
     cursor: grabbing;
+}
+
+#slider:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px #007acc00, 0 0 0 4px rgba(95, 95, 95, 0.322);
 }
 
 #slider-help {
@@ -18,5 +25,5 @@ figure {
     font-style: italic;
     color: grey;
     font-size: 12px;
+    margin-top: 4px;
 }
-
