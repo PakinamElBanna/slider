@@ -96,12 +96,21 @@ export function initializeCanvas() {
   });
 
   canvas.addEventListener("pointermove", (e) => {
-    if (isDragging) {
-      const movementX = e.clientX - startX;
-      offsetX += movementX;
-      startX = e.clientX;
-      drawImages();
-    }
+    if (!isDragging) return;
+
+    const movementX = e.clientX - startX;
+    const newOffsetX = offsetX + movementX;
+    const leftDraggingOffset = -(slides.length - 1);
+
+    const minOffsetX = leftDraggingOffset * canvasWidth; // using canvasWidth is only valid because of the drawContain function
+    const maxOffsetX = 0;
+
+    if (newOffsetX > maxOffsetX || newOffsetX < minOffsetX) return;
+
+    offsetX = newOffsetX;
+    startX = e.clientX;
+
+    drawImages();
   });
 
   canvas.addEventListener("pointerup", (e) => {
