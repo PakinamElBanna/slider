@@ -11,3 +11,6 @@ const collator = Intl.Collator(undefined, {
 });
 
 export const slideUrls = slides.sort((a, b) => collator.compare(a, b));
+export const fallbackUrls = slideUrls.map(
+  (url) => url.replace("cdn.example.com", "backup-cdn.example.com") // this is a placeholder just to demonstrate a technique. The second url doesnt exist for now.
+);
