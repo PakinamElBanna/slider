@@ -2,12 +2,16 @@ export function createScheduler() {
   let scheduled = false;
 
   return function scheduleRedraw(callback) {
-    if (!scheduled) {
-      scheduled = true;
-      requestAnimationFrame(() => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      try {
         callback();
+      } catch (err) {
+        throw err;
+      } finally {
         scheduled = false;
-      });
-    }
+      }
+    });
   };
 }
