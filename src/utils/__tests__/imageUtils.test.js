@@ -10,12 +10,20 @@ describe("imageUtils", () => {
 
   beforeEach(() => {
     canvas = document.createElement("canvas");
-    ctx = canvas.getContext("2d");
 
-    // Mock canvas context methods
-    jest.spyOn(ctx, "drawImage").mockImplementation(jest.fn());
-    jest.spyOn(ctx, "fillText").mockImplementation(jest.fn());
-    jest.spyOn(ctx, "fillRect").mockImplementation(jest.fn());
+    // Mock the canvas context with all methods imageUtils functions use
+    ctx = {
+      drawImage: jest.fn(),
+      fillText: jest.fn(),
+      fillRect: jest.fn(),
+      fillStyle: "#333333",
+      textAlign: "center",
+      textBaseline: "middle",
+      font: "16px Arial",
+    };
+
+    // Mock getContext to return our mocked context
+    jest.spyOn(canvas, "getContext").mockReturnValue(ctx);
 
     // Mock console methods
     jest.spyOn(console, "warn").mockImplementation(jest.fn());

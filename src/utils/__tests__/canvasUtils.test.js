@@ -17,7 +17,7 @@ describe("canvasUtils", () => {
     it("should handle single slide", () => {
       const result = calculateBoundaries(1, 800);
 
-      expect(result.minOffsetX).toBe(-0); // -0 is equivalent to 0 but I wanted to leave it to show the X direction
+      expect(result.minOffsetX).toBe(-0);
       expect(result.maxOffsetX).toBe(0);
     });
   });
@@ -40,7 +40,7 @@ describe("canvasUtils", () => {
     it("should return range starting from current slide", () => {
       const result = getVisibleSlideRange(0, 800, 5);
 
-      expect(Math.abs(result.startSlideIndex)).toBe(0);
+      expect(result.startSlideIndex).toBe(-0);
       expect(result.endSlideIndex).toBe(2);
     });
 
@@ -57,12 +57,33 @@ describe("canvasUtils", () => {
 
     beforeEach(() => {
       canvas = document.createElement("canvas");
-      ctx = canvas.getContext("2d");
+
+      // Mock the canvas context with the methods setupCanvasForDPR uses
+      ctx = {
+        setTransform: jest.fn(),
+        scale: jest.fn(),
+      };
+
+      // Mock getContext to return our mocked context
+      jest.spyOn(canvas, "getContext").mockReturnValue(ctx);
 
       // devicePixelRatio mock
       Object.defineProperty(window, "devicePixelRatio", {
         value: 2,
         configurable: true,
+        writable: true,
+      });
+
+      // Clear mocks
+      jest.clearAllMocks();
+    });
+
+    afterEach(() => {
+      // Reset devicePixelRatio
+      Object.defineProperty(window, "devicePixelRatio", {
+        value: 1,
+        configurable: true,
+        writable: true,
       });
     });
 
@@ -80,6 +101,13 @@ describe("canvasUtils", () => {
 
       expect(canvas.style.width).toBe("800px");
       expect(canvas.style.height).toBe("600px");
+    });
+
+    it("should call setTransform and scale", () => {
+      setupCanvasForDPR(canvas, ctx, 800, 600);
+
+      expect(ctx.setTransform).toHaveBeenCalledWith(1, 0, 0, 1, 0, 0);
+      expect(ctx.scale).toHaveBeenCalledWith(2, 2);
     });
   });
 });
